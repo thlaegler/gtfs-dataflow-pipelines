@@ -1,0 +1,47 @@
+steps:
+
+- id: PREPARE
+  name: gcr.io/cloud-builders/gcloud
+  entrypoint: /bin/bash
+  args:
+  - '-c'
+  - |
+    cp cloudbuild/init_cloudbuild.sh init_cloudbuild.sh
+    ./init_cloudbuild.sh
+
+- id: TEST PIPELINE
+  name: gcr.io/cloud-builders/maven
+  waitFor: [ 'PREPARE' ]
+  entrypoint: /bin/bash
+  args:
+  - '-c'
+  - |
+    export GTFS_BUCKET="gs://$PROJECT_ID-gtfs"
+    mvn clean install
+    mvn compile exec:java -Dexec.mainClass=com.laegler.gtfs.statik.ImportGtfsZip -Dexec.args="--project=$PROJECT_ID --runner=DataflowRunner --input=$GTFS_BUCKET/at/20190429120000/at.zip --output=$GTFS_BUCKET/output/ --stagingLocation=$GTFS_BUCKET/staging/ --temp_location $GTFS_BUCKET/_DATAFLOW/temp/"
+
+- id: RUN PIPELINE
+  name: gcr.io/cloud-builders/maven
+  waitFor: [ 'PREPARE' ]
+  entrypoint: /bin/bash
+  args:
+  - '-c'
+  - |
+    export GTFS_BUCKET="gs://$PROJECT_ID-gtfs"
+    mvn clean install
+    mvn compile exec:java -Pdataflow-runner -Dexec.mainClass=com.laegler.gtfs.statik.ImportGtfsZip -Dexec.args="--project=$PROJECT_ID --runner=DataflowRunner --input=$GTFS_BUCKET/at/20190429120000/at.zip --output=$GTFS_BUCKET/output/ --stagingLocation=$GTFS_BUCKET/staging/ --temp_location $GTFS_BUCKET/_DATAFLOW/temp/"
+
+#- id: DOCKER BUILD
+#  name: gcr.io/cloud-builders/docker
+#  waitFor: [ 'MAVEN BUILD' ]
+#  entrypoint: /bin/bash
+#  args: [ './docker-build-push.sh' ]
+#
+#- id: HELM DEPLOY
+#  name: gcr.io/mobilityos-dev/helm-builder:1.0.0
+#  waitFor: [ 'DOCKER BUILD' ]
+#  entrypoint: /bin/bash
+#  args: [ './helm-deploy.sh' ]
+
+
+timeout: 600s
